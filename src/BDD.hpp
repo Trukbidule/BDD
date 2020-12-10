@@ -84,8 +84,7 @@ public:
 
   /* Look up (if exist) or build (if not) the node with variable `var`,
    * THEN child `T`, and ELSE child `E`. */
-  index_t unique( var_t var, index_t T, index_t E )
-  {
+  index_t unique( var_t var, index_t T, index_t E ){
     assert( var < num_vars() && "Variables range from 0 to `num_vars - 1`." );
     assert( T < nodes.size() && "Make sure the children exist." );
     assert( E < nodes.size() && "Make sure the children exist." );
@@ -119,6 +118,16 @@ public:
   index_t literal( var_t var, bool complement = false )
   {
     return unique( var, constant( !complement ), constant( complement ) );
+  }
+  
+  /********************* Ref Operations *********************/
+  
+  index_t ref( index_t f ){
+      return f;
+  }
+  
+  void deref(index_t f){
+      
   }
 
   /**********************************************************/
@@ -450,8 +459,7 @@ public:
   Truth_Table get_tt( index_t f ) const
   {
     assert( f < nodes.size() && "Make sure f exists." );
-    assert( num_vars() <= 6 && "Truth_Table only supports functions of no greater than 6 variables." );
-
+    //assert( num_vars() <= 6 && "Truth_Table only supports functions of no greater than 6 variables." );
     if ( f == constant( false ) )
     {
       return Truth_Table( num_vars() );
@@ -465,6 +473,7 @@ public:
     var_t const x = nodes[f].v;
     index_t const fx = nodes[f].T;
     index_t const fnx = nodes[f].E;
+    //pb next line
     Truth_Table const tt_x = create_tt_nth_var( num_vars(), x );
     Truth_Table const tt_nx = create_tt_nth_var( num_vars(), x, false );
     return ( tt_x & get_tt( fx ) ) | ( tt_nx & get_tt( fnx ) );

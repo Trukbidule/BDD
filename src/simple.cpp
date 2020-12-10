@@ -47,8 +47,8 @@ int main()
     auto const x1 = bdd.literal( 1 );
     auto const f = bdd.XOR( x0, x1 );
     auto const tt = bdd.get_tt( f );
-    //bdd.print( f );
-    //cout << tt << endl;
+    bdd.print( f );
+    cout << tt << endl;
     passed &= check( tt, "0110" );
     passed &= check( bdd.num_nodes( f ), 3 );
   }

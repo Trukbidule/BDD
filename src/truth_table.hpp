@@ -7,7 +7,7 @@
 #include <cmath>
 
 //nb of bit per block in vector bits
-#define BLOCK_SIZE      64
+#define BLOCK_SIZE 64
 
 /* masks used to filter out unused bits */
 static const uint64_t length_mask[] = {
@@ -37,23 +37,6 @@ static const uint64_t var_mask_neg[] = {
   0x0000ffff0000ffff,
   0x00000000ffffffff};
 
-//return the length_mask of the block block
-static const uint64_t mask_of_block(const uint32_t block){
-    uint32_t last_block = (power_two(this->num_var) % BLOCK_SIZE);
-    if(block != last_block)//if not last block: all bit selected
-        return length_mask[6];
-
-    //if last block: get the nb of bit in local block
-    uint32_t nb_bit_local = power_two(this->num_var) - (last_block+1)*BLOCK_SIZE;
-
-    //build a mask by adding 1 shifted in the right positions
-    uint32_t mask = 0x0;
-    for(int i=0; i<nb_bit_local; i++){
-        mask |= (0x1 << i);
-    }
-    return mask;
-}
-
 //return 2^n
 uint32_t power_two(const uint32_t n ){
     uint32_t val = 1;
@@ -69,18 +52,18 @@ inline uint8_t inv_power_two( const uint32_t n ){
     uint8_t ret= 0u;
     
     //if integer, return the value
-    if(ceilf(v) == v)
-        ret = (uint8_t)(ceilf(v));
+    if(ceilf(value) == value)
+        ret = (uint8_t)(ceilf(value));
     
     return ret;
 }
 
 class Truth_Table{
 public:
-    //empty constructor with thruth table = 0
-    Truth_Table(uint8_t p_num_var){
-        this->num_var = p_num_var;
-        uint32_t nb_block = (power_two(p_num_var) % BLOCK_SIZE) +1;
+    //default constructor with thruth table = polarity (all 0, or 1)
+    Truth_Table(uint8_t p_num_var) : num_var(p_num_var){
+        //this->num_var = p_num_var;
+        uint32_t nb_block = (power_two(p_num_var)/BLOCK_SIZE) +1;
         //build the blocks
         for(int i=0; i<nb_block; i++){
             this->bits.push_back(0u);
@@ -88,9 +71,9 @@ public:
     }
 
     //constructor from nb var and truth table in vector
-    Truth_Table(uint8_t p_num_var, std::vector<uint64_t> p_bits){
-        this->num_var = p_num_var;
-        uint32_t nb_block = (power_two(p_num_var) % BLOCK_SIZE) +1;
+    Truth_Table(uint8_t p_num_var, std::vector<uint64_t> p_bits) : num_var(p_num_var){
+        //this->num_var = p_num_var;
+        uint32_t nb_block = (power_two(p_num_var)/BLOCK_SIZE) +1;
         uint64_t bit_buffer = 0u;
         
         //safety check: must give enough bits
@@ -105,9 +88,9 @@ public:
     }
 
     //constructor from a string of 0 and 1
-    Truth_Table( const std::string str ){
-        this->num_var = inv_power_two(str.size());
-        uint32_t nb_block = (this->num_var % BLOCK_SIZE) +1;
+    Truth_Table(const std::string str) : num_var( inv_power_two(str.size()) ){
+        //this->num_var = inv_power_two(str.size());
+        uint32_t nb_block = (this->num_var/BLOCK_SIZE) +1;
 
         //safety check
         if(this->num_var == 0)
@@ -131,25 +114,43 @@ public:
 
     //return the value of the bit at the global pos position
     bool get_bit(uint32_t const position) const{
-        uint32_t block = position % BLOCK_SIZE;
-        uint32_t local_pos = position - block*BLOCK_SIZE;
+        uint32_t block = position/BLOCK_SIZE;
+        uint32_t local_pos = position % BLOCK_SIZE;
+        //uint32_t local_pos = position - block*BLOCK_SIZE;
         //assert( position < ( 1 << num_var ) );
         //in the corresponding block, shift the bit at pos, read it
         return ( ( this->bits.at(block) >> local_pos ) & 0x1 );
     }
 
     void set_bit(uint32_t const position){
-        uint32_t block = position % BLOCK_SIZE;
-        uint32_t local_pos = position - block*BLOCK_SIZE;
+        uint32_t block = position/BLOCK_SIZE;
+        uint32_t local_pos = position % BLOCK_SIZE;
         
         //assert( position < ( 1 << num_var ) );
         this->bits.at(block) |= (uint64_t(1) << local_pos);//set the bit
-        this->bits.at(block) &= mask_of_block(block);//safety: mask unused bits
+        this->bits.at(block) &= this->mask_of_block(block);//safety: mask unused bits
     }
 
     //getter num_var
     uint8_t n_var() const{
         return num_var;
+    }
+
+    //return the length_mask of the block block
+    const uint64_t mask_of_block(const uint32_t block){
+        uint32_t last_block = (power_two(this->num_var)/BLOCK_SIZE);
+        if(block != last_block)//if not last block: all bit selected
+            return length_mask[6];
+
+        //if last block: get the nb of bit in local block
+        uint32_t nb_bit_local = power_two(this->num_var) - last_block*BLOCK_SIZE;
+
+        //build a mask by adding 1 shifted in the right positions
+        uint32_t mask = 0x0;
+        for(int i=0; i<nb_bit_local; i++){
+            mask |= (0x1 << i);
+        }
+        return mask;
     }
 
     //defined as inline later, after the operators
@@ -176,7 +177,7 @@ inline std::vector<uint64_t> bw_NOT(std::vector<uint64_t> v){
     std::vector<uint64_t> v_not;
     
     //NOT on each block, put it in v_not
-    for(int i=0; i<v1.size(); i++){
+    for(int i=0; i<v.size(); i++){
         v_not.emplace_back(~v.at(i));
     }
     return v_not;
@@ -303,7 +304,29 @@ inline bool operator!=(Truth_Table const& tt1, Truth_Table const& tt2){
 // }
 
 /* Returns the truth table of f(x_0, ..., x_num_var) = x_var (or its complement). */
-inline Truth_Table create_tt_nth_var( uint8_t const num_var, uint8_t const var, bool const polarity = true ){
+Truth_Table create_tt_nth_var( uint8_t const num_var, uint8_t const var, bool const polarity = true ){
     assert (var < num_var );
-    return Truth_Table( num_var, polarity ? var_mask_pos[var] : var_mask_neg[var] );
+    
+    uint32_t nb_tot_bit = power_two(num_var);
+    uint32_t sequence_size = power_two(var);
+    
+    uint32_t pos_in_sequence = 0;
+    bool pol = !polarity;//starting val in the array
+    
+    Truth_Table tt = Truth_Table(num_var);//empty truth table
+    //fill with groups of alternating 0/1 with a period of pow2(var) the tt
+    for(uint32_t i=0; i<nb_tot_bit; i++){
+        if(pos_in_sequence >= sequence_size){//if starts new sequence
+            pos_in_sequence=0;
+            pol = !pol;
+        }
+        if(pol){
+            tt.set_bit(i);
+        }
+        
+        pos_in_sequence++;
+    }
+    
+    return tt;
+    //return Truth_Table( num_var, polarity ? var_mask_pos[var] : var_mask_neg[var] );
 }
