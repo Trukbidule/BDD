@@ -304,6 +304,7 @@ inline bool operator!=(Truth_Table const& tt1, Truth_Table const& tt2){
 // }
 
 /* Returns the truth table of f(x_0, ..., x_num_var) = x_var (or its complement). */
+//to improve later
 Truth_Table create_tt_nth_var( uint8_t const num_var, uint8_t const var, bool const polarity = true ){
     assert (var < num_var );
     
