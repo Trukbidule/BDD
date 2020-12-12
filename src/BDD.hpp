@@ -6,6 +6,9 @@
 #include <vector>
 #include <unordered_map>
 #include <functional>
+#include <utility>
+#include <tuple>
+#include <string>
 
 /* These are just some hacks to hash std::pair (for the unique table).
  * You don't need to understand this part. */
@@ -43,6 +46,8 @@ public:
   using var_t = uint32_t;
   /* Similarly, declare `var_t` also as an alias for an unsigned integer.
    * This datatype will be used for representing variables. */
+
+   using signal_t = uint32_t;
 
 private:
   struct Node
@@ -85,7 +90,8 @@ public:
   /* Look up (if exist) or build (if not) the node with variable `var`,
    * THEN child `T`, and ELSE child `E`. */
   index_t unique( var_t var, index_t T, index_t E ){
-    assert( var < num_vars() && "Variables range from 0 to `num_vars - 1`." );
+    //std::cout<< "var:" <<std::to_string(var) << "num_var:" <<std::to_string(num_vars())<<std::endl;
+    assert( var < num_vars() && "Variables range from 0 to `num_vars - 1`. var:");
     assert( T < nodes.size() && "Make sure the children exist." );
     assert( E < nodes.size() && "Make sure the children exist." );
     assert( nodes[T].v > var && "With static variable order, children can only be below the node." );
@@ -556,11 +562,11 @@ private:
    * Each map maps from a pair of node indices (T, E) to a node index, if it exists.
    * See the implementation of `unique` for example usage. */
 
-   /* Computed tables for each operation type. */
-   std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_AND;
-   std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_OR;
-   std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_XOR;
-   std::unordered_map<std::tuple<signal_t, signal_t, signal_t>, signal_t> computed_table_ITE;
+   // /* Computed tables for each operation type. */
+   // std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_AND;
+   // std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_OR;
+   // std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_XOR;
+   // std::unordered_map<std::tuple<signal_t, signal_t, signal_t>, signal_t> computed_table_ITE;
 
   /* statistics */
   uint64_t num_invoke_not, num_invoke_and, num_invoke_or, num_invoke_xor, num_invoke_ite;

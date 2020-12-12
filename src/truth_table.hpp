@@ -85,12 +85,13 @@ public:
             bit_buffer &= mask_of_block(i);
             this->bits.push_back(bit_buffer);//add the bits at index/block i
         }
+        
     }
 
     //constructor from a string of 0 and 1
     Truth_Table(const std::string str) : num_var( inv_power_two(str.size()) ){
         //this->num_var = inv_power_two(str.size());
-        uint32_t nb_block = (this->num_var/BLOCK_SIZE) +1;
+        uint32_t nb_block = (str.size()/BLOCK_SIZE) +1;
 
         //safety check
         if(this->num_var == 0)
@@ -100,7 +101,7 @@ public:
         for(int i=0; i<nb_block; i++){
             this->bits.push_back(0u);
         }
-    
+        
         //check each char, add 1 if find it
         for ( auto i = 0u; i < str.size(); i++ ){
             if ( str[i] == '1' ){
@@ -109,7 +110,6 @@ public:
                 assert( str[i] == '0' );
             }
         }
-        
     }
 
     //return the value of the bit at the global pos position
@@ -126,6 +126,8 @@ public:
         uint32_t block = position/BLOCK_SIZE;
         uint32_t local_pos = position % BLOCK_SIZE;
         
+        //std::cout << "block: "<<block <<" local_pos: "<<local_pos<<std::endl;
+        //std::cout << "size"<<this->bits.size()<<std::endl;
         //assert( position < ( 1 << num_var ) );
         this->bits.at(block) |= (uint64_t(1) << local_pos);//set the bit
         this->bits.at(block) &= this->mask_of_block(block);//safety: mask unused bits

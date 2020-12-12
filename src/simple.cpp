@@ -80,5 +80,41 @@ int main()
     passed &= check( bdd.num_nodes( f ), 3 );
   }
 
+  {
+    cout << "test 03: x0.x1.x2.x3.x4.x5.x6.x7 +x1.x8)" << endl;
+    BDD bdd( 9 );
+    auto const x0 = bdd.literal( 0 );
+    auto const x1 = bdd.literal( 1 );
+    auto const x2 = bdd.literal( 2 );
+    auto const x3 = bdd.literal( 3 );
+    auto const x4 = bdd.literal( 4 );
+    auto const x5 = bdd.literal( 5 );
+    auto const x6 = bdd.literal( 6 );
+    auto const x7 = bdd.literal( 7 );
+    auto const x8 = bdd.literal( 8 );
+    
+    auto const and01 = bdd.AND(x0, x1);
+    auto const and23 = bdd.AND(x2, x3);
+    auto const and45 = bdd.AND(x4, x5);
+    auto const and67 = bdd.AND(x6, x7);
+    auto const and18 = bdd.AND(x1, x8);
+    auto const andTop1 = bdd.AND(and01, and23);
+    auto const andTop2 = bdd.AND(and45, and67);
+    auto const andTop3 = bdd.AND(andTop1, andTop2);
+    
+    auto const f = bdd.OR(andTop3, and18);
+    
+    auto const tt = bdd.get_tt( f );
+    //bdd.print(f);
+    cout << "Obtained: "<<endl;
+    cout << tt << endl;
+    string correction = "11001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001100110011001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+    cout << "Expected: "<<endl;
+    cout << Truth_Table(correction)<<endl;
+    passed &= check( tt, correction);
+    //passed &= check( bdd.num_nodes( f ), 3 );
+  }
+
+
   return passed ? 0 : 1;
 }
