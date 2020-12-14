@@ -1,5 +1,12 @@
 #pragma once
 
+//make_signal( index_t index, bool complement = false )
+//get_index( signal_t signal )
+//set_complemented(signal_t signal, bool complement)
+//is_complemented( signal_t signal )
+//get_node( signal_t signal )
+
+
 #include <iostream>
 #include <cassert>
 #include <string>
