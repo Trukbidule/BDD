@@ -9,6 +9,7 @@
 #include <utility>
 #include <tuple>
 #include <string>
+#include <vector>
 
 /* These are just some hacks to hash std::pair (for the unique table).
  * You don't need to understand this part. */
@@ -56,8 +57,8 @@ private:
     struct Node{
         var_t v; /* corresponding variable */
         //children=signals: index of child+last bit=complemented
-        signal_t T; /* index of THEN child */
-        signal_t E; /* index of ELSE child */
+        signal_t Ts; /* index of THEN child */
+        signal_t Es; /* index of ELSE child */
     };
 
     //create a signal from node index and complemented
@@ -76,6 +77,11 @@ private:
     //change only the complement of a signal
     inline signal_t set_complemented(signal_t signal, bool complement) const{
         return complement ? ( get_index(signal) << 1 ) + 1 : get_index(signal) << 1;
+    }
+    
+    //toggle the complement of a signal
+    inline signal_t toggle_complemented(signal_t signal) const{
+        return is_complemented(signal) ? get_index(signal) << 1 : ( get_index(signal) << 1 ) + 1;
     }
 
     //extract complemented from a signal
@@ -127,47 +133,78 @@ public:
     signal_t constant_sig(bool value) const {
         return value ? make_signal(constant_ind(), 0) : make_signal(constant_ind(), 1);
     }
+    
+    //find the signals incomming on the node n
+    std::vector<signal_t> get_signals_on(index_t n){
+        std::vector<signal_t> sig;
+        //scan the outgoing signal of all nodes, skip the constant at i=0
+        for(index_t i=1; i<this->nodes.size(); i++){
+            //if a signal from node i points to n: add it to sig (safety: avoid loop)
+            if( (get_index(this->nodes[i].Ts) == n) && (get_index(this->nodes[i].Ts) != i) )
+                sig.emplace_back(this->nodes[i].Ts);
+            if( (get_index(this->nodes[i].Es) == n) && (get_index(this->nodes[i].Es) != i) )
+                sig.emplace_back(this->nodes[i].Es);
+        }
+        return sig;
+    }
 
     /* Look up (if exist) or build (if not) the node with variable `var`,
     * THEN child `T`, and ELSE child `E`. */
-    index_t unique( var_t var, signal_t Ts, signal_t Es ) {
-        //TO ADAPT PRIO
+    signal_t unique( var_t var, signal_t Ts, signal_t Es ) {
+        //adapt from signal to index:
+        index_t t = get_index(Ts);
+        index_t e = get_index(Es);
+        
         //std::cout<< "var:" <<std::to_string(var) << "num_var:" <<std::to_string(num_vars())<<std::endl;
         assert( var < num_vars() && "Variables range from 0 to `num_vars - 1`. var:");
-        assert( T < nodes.size() && "Make sure the children exist." );
-        assert( E < nodes.size() && "Make sure the children exist." );
-        assert( nodes[T].v > var && "With static variable order, children can only be below the node." );
-        assert( nodes[E].v > var && "With static variable order, children can only be below the node." );
+        assert( t < nodes.size() && "Make sure the children exist." );
+        assert( e < nodes.size() && "Make sure the children exist." );
+        assert( nodes[t].v > var && "With static variable order, children can only be below the node." );
+        assert( nodes[e].v > var && "With static variable order, children can only be below the node." );
 
         /* Reduction rule: Identical children */
-        if ( T == E ) {
-            return T;
+        if ( Ts == Es ) {
+            return Ts;
+        }
+        /* Reduction rule: remove the complement on T edge PART 1*/
+        if( is_complemented(Ts) ){//if complement on Ts:
+            toggle_complemented(Ts); //remove the complement of Ts
+            toggle_complemented(Es); //toggle the complement of Es
+            //toggle the complement of edges incomming on the node in part 2
         }
 
+
         /* Look up in the unique table. */
-        const auto it = unique_table[var].find( {T, E} );
-        if ( it != unique_table[var].end() ) {
+        const auto it = unique_table[var].find( {Ts, Es} );
+        if ( it != unique_table[var].end() ){
             /* The required node already exists. Return it. */
-            return it->second;
+            
+            /* Reduction rule: remove the complement on T edge PART 2*/
+            //if the node exist: toggle the complement of edges incomming onto it
+            std::vector<signal_t> sig = get_signals_on(it->second);
+            for(int i=0; i<sig.size(); i++){
+                toggle_complemented( sig.at(i) );
+            }
+            
+            return make_signal(it->second, false);
         } else {
             /* Create a new node and insert it to the unique table. */
             index_t const new_index = nodes.size();
-            nodes.emplace_back( Node({var, T, E}) );
-            unique_table[var][{T, E}] = new_index;
-            return new_index;
+            nodes.emplace_back( Node({var, Ts, Es}) );
+            unique_table[var][{Ts, Es}] = new_index;
+            return make_signal(new_index, false);
         }
     }
 
     /* Return a node (represented with its index) of function F = x_var or F = ~x_var. */
-    index_t literal( var_t var, bool complement = false ) {
-        //TO ADAPT PRIO
-        return unique( var, constant( !complement ), constant( complement ) );
+    signal_t literal( var_t var, bool complement = false ) {
+        return unique( var, constant_sig( !complement ), constant_sig( complement ) );
     }
   
     /********************* Ref Operations *********************/
   
     index_t ref( index_t f ){
-        //TO DO PHASE 2
+        //TODO PHASE 2
         return f;
     }
 
@@ -182,7 +219,7 @@ public:
     /* Compute ~f */
     signal_t NOT(signal_t fs) {
         signal_t sig = make_signal(fs, !is_complemented(fs));
-        return unique(sig.get_node().var, sig.get_node().Ts, sig.get_node().Es);
+        return unique( get_node(sig).v, get_node(sig).Ts, get_node(sig).Es );
         
         //adapt from signal to index:
         // index_t f = get_index(fs);
@@ -209,11 +246,8 @@ public:
     signal_t XOR(signal_t fs, signal_t gs) {
         //adapt from signal to index:
         index_t f = get_index(fs);
-        bool fc = is_complemented(fs);
         index_t g = get_index(gs);
-        bool gc = is_complemented(gs);
         
-        //TO ADAPT SIGNALS
         assert( f < nodes.size() && "Make sure f exists." );
         assert( g < nodes.size() && "Make sure g exists." );
         ++num_invoke_xor;
@@ -244,12 +278,12 @@ public:
         Node const& G = nodes[g];
         var_t x;
         signal_t f0s, f1s, g0s, g1s;
-        if ( F.v < G.v ) {/* F is on top of G */
+        if( F.v < G.v ) {/* F is on top of G */
             x = F.v;
             f0s = F.Es;
             f1s = F.Ts;
             g0s = g1s = gs;
-        } else if ( G.v < F.v ) {/* G is on top of F */
+        } else if( G.v < F.v ) {/* G is on top of F */
             x = G.v;
             f0s = f1s = fs;
             g0s = G.Es;
@@ -262,18 +296,16 @@ public:
             g1s = G.Ts;
         }
 
-        signal_t const r0s = XOR( f0s, g0s );
-        signal_t const r1s = XOR( f1s, g1s );
-        return unique( x, r1s, r0s );
+        signal_t const r0s = XOR(f0s, g0s);
+        signal_t const r1s = XOR(f1s, g1s);
+        return unique(x, r1s, r0s);
     }
 
     /* Compute f & g */
-    index_t AND(signal_t fs, signal_t gs) {
+    signal_t AND(signal_t fs, signal_t gs) {
         //adapt from signal to index:
         index_t f = get_index(fs);
-        bool fc = is_complemented(fs);
         index_t g = get_index(gs);
-        bool gc = is_complemented(gs);
         
         assert( f < nodes.size() && "Make sure f exists." );
         assert( g < nodes.size() && "Make sure g exists." );
@@ -286,23 +318,28 @@ public:
         if( fs == constant_sig(true) ){//1&x=x
             return gs;
         }
-        if ( gs == constant_sig(true) ){//x&1=x
+        if( gs == constant_sig(true) ){//x&1=x
             return fs;
         }
-        if ( fs == gs ){//x&x=x
+        if( fs == gs ){//x&x=x
             return fs;
+        }
+        if( f == g ){//case f==!g, x&!x=0
+            //the case fs==gs has already been evaluated before, so
+            //if f==g => only the complement is different => f==!g
+            return constant_sig(false);
         }
 
         Node const& F = nodes[f];
         Node const& G = nodes[g];
         var_t x;
         signal_t f0s, f1s, g0s, g1s;
-        if ( F.v < G.v ) {/* F is on top of G */
+        if( F.v < G.v ) {/* F is on top of G */
             x = F.v;
             f0s = F.Es;
             f1s = F.Ts;
             g0s = g1s = gs;
-        } else if ( G.v < F.v ) {/* G is on top of F */
+        } else if( G.v < F.v ) {/* G is on top of F */
             x = G.v;
             f0s = f1s = fs;
             g0s = G.Es;
@@ -321,7 +358,7 @@ public:
     }
 
     /* Compute f | g */
-    index_t OR(signal_t fs, signal_t gs) {
+    signal_t OR(signal_t fs, signal_t gs) {
         //adapt from signal to index:
         index_t f = get_index(fs);
         bool fc = is_complemented(fs);
@@ -350,12 +387,12 @@ public:
         Node const& G = nodes[g];
         var_t x;
         signal_t f0s, f1s, g0s, g1s;
-        if ( F.v < G.v ) {/* F is on top of G */
+        if( F.v < G.v ) {/* F is on top of G */
             x = F.v;
-            f0s = F.E;
-            f1s = F.T;
+            f0s = F.Es;
+            f1s = F.Ts;
             g0s = g1s = gs;
-        } else if ( G.v < F.v ) {/* G is on top of F */
+        } else if( G.v < F.v ) {/* G is on top of F */
             x = G.v;
             f0s = f1s = fs;
             g0s = G.Es;
@@ -368,8 +405,8 @@ public:
             g1s = G.Ts;
         }
 
-        signal_t const r0 = OR(f0s, g0s);
-        signal_t const r1 = OR(f1s, g1s);
+        signal_t const r0s = OR(f0s, g0s);
+        signal_t const r1s = OR(f1s, g1s);
         return unique(x, r1s, r0s);
     }
 
@@ -383,7 +420,7 @@ public:
         
         //shannon exp: f = f.g + !f.h
         signal_t sig = OR( AND(fs, gs), AND(NOT(fs), hs) );
-        return unique(sig.get_node().var, sig.get_node().Ts, sig.get_node().Es);
+        return unique( get_node(sig).v, get_node(sig).Ts, get_node(sig).Es );
         
         // assert( f < nodes.size() && "Make sure f exists." );
         // assert( g < nodes.size() && "Make sure g exists." );
@@ -464,7 +501,7 @@ public:
         if ( ( fs == constant_sig(true) ) || ( fs == constant_sig(false) ) ){//display cst, only 0
             os << "node " << f << ": constant " << f <<(fc ? " (c)":" (nc)")<< std::endl;
         } else {
-            os << "node " << f <<(fc ? " (c)":" (nc)")<< ": var = " << nodes[f].v << ", T = " << nodes[f].T << ", E = " << nodes[f].E << std::endl;
+            os << "node " << f <<(fc ? " (c)":" (nc)")<< ": var = " << nodes[f].v << ", T = " << get_index(nodes[f].Ts) << ", E = " << get_index(nodes[f].Es) << std::endl;
         
             for ( auto i = 0u; i < nodes[f].v; ++i ){
                 os << "  ";
@@ -481,25 +518,29 @@ public:
     }
 
     /* Get the truth table of the BDD rooted at node f. */
-    Truth_Table get_tt( index_t f ) const {
-        //TO ADAPT PRIO
+    Truth_Table get_tt( signal_t fs ) const {
+        //adapt from signal to index:
+        index_t f = get_index(fs);
+        bool fc = is_complemented(fs);
+        
         assert( f < nodes.size() && "Make sure f exists." );
         //assert( num_vars() <= 6 && "Truth_Table only supports functions of no greater than 6 variables." );
         
-        if ( f == constant( false ) ) {
-            return Truth_Table( num_vars() );
+        if( fs == constant_sig(false) ) {
+            return Truth_Table( num_vars() );//gives a TT full of 0
         }
-        else if ( f == constant( true ) ) {
-            return ~Truth_Table( num_vars() );
+        else if( fs == constant_sig(true) ) {
+            return ~Truth_Table( num_vars() );//gives a TT full of 1
         }
 
         /* Shannon expansion: f = x f_x + x' f_x' */
         var_t const x = nodes[f].v;
-        index_t const fx = nodes[f].T;
-        index_t const fnx = nodes[f].E;
+        //if fs complemented in the first place: inverse the children TT
+        signal_t const fxs = fc ? toggle_complemented(nodes[f].Ts) : nodes[f].Ts;
+        signal_t const fnxs = fc ? toggle_complemented(nodes[f].Es) : nodes[f].Es;
         Truth_Table const tt_x = create_tt_nth_var( num_vars(), x );
         Truth_Table const tt_nx = create_tt_nth_var( num_vars(), x, false );
-        return ( tt_x & get_tt( fx ) ) | ( tt_nx & get_tt( fnx ) );
+        return ( tt_x & get_tt( fxs ) ) | ( tt_nx & get_tt( fnxs ) );
     }
 
     /* Whether `f` is dead (having a reference count of 0). */
@@ -520,11 +561,14 @@ public:
     }
 
     /* Get the number of nodes in the sub-graph rooted at node f, excluding constants. */
-    uint64_t num_nodes( index_t f ) const {
+    uint64_t num_nodes(signal_t fs) const {
+        //adapt from signal to index:
+        index_t f = get_index(fs);
+        
         assert( f < nodes.size() && "Make sure f exists." );
 
         //still working since constant(x) gives always 0
-        if ( f == constant( false ) || f == constant( true ) ){
+        if ( fs == constant_sig(false) || fs == constant_sig(true) ){
             return 0u;
         }
 
@@ -532,7 +576,7 @@ public:
         visited[0] = true;
         visited[1] = true;
 
-        return num_nodes_rec( f, visited );
+        return num_nodes_rec( fs, visited );
     }
 
     uint64_t num_invoke() const {
@@ -544,21 +588,26 @@ private:
     /******************** Helper Functions ********************/
     /**********************************************************/
 
-    uint64_t num_nodes_rec( index_t f, std::vector<bool>& visited ) const {
+    uint64_t num_nodes_rec( signal_t fs, std::vector<bool>& visited ) const {
+        //adapt from signal to index:
+        index_t f = get_index(fs);
+        index_t t = get_index(nodes[f].Ts);
+        index_t e = get_index(nodes[f].Es);
+        
         assert( f < nodes.size() && "Make sure f exists." );
 
         uint64_t n = 0u;
         Node const& F = nodes[f];
-        assert( F.T < nodes.size() && "Make sure the children exist." );
-        assert( F.E < nodes.size() && "Make sure the children exist." );
+        assert( t < nodes.size() && "Make sure the children exist." );
+        assert( e < nodes.size() && "Make sure the children exist." );
         
-        if ( !visited[F.T] ){
-            n += num_nodes_rec( F.T, visited );
-            visited[F.T] = true;
+        if ( !visited[t] ){
+            n += num_nodes_rec( F.Ts, visited );
+            visited[t] = true;
         }
-        if ( !visited[F.E] ){
-            n += num_nodes_rec( F.E, visited );
-            visited[F.E] = true;
+        if ( !visited[e] ){
+            n += num_nodes_rec( F.Es, visited );
+            visited[e] = true;
         }
         return n + 1u;
     }
