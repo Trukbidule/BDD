@@ -13,27 +13,49 @@
 
 /* These are just some hacks to hash std::pair (for the unique table).
  * You don't need to understand this part. */
-namespace std
-{
-template<class T>
-inline void hash_combine( size_t& seed, T const& v )
-{
-  seed ^= hash<T>()(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-}
+namespace std{
+    template<class T>
+        inline void hash_combine( size_t& seed, T const& v ){
+            seed ^= hash<T>()(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        }
 
-template<>
-struct hash<pair<uint32_t, uint32_t>>
-{
-  using argument_type = pair<uint32_t, uint32_t>;
-  using result_type = size_t;
-  result_type operator() ( argument_type const& in ) const
-  {
-    result_type seed = 0;
-    hash_combine( seed, in.first );
-    hash_combine( seed, in.second );
-    return seed;
-  }
-};
+    template<>//for the unique_table
+        struct hash<pair<uint32_t, uint32_t>>{
+            using argument_type = pair<uint32_t, uint32_t>;
+            using result_type = size_t;
+            result_type operator() ( argument_type const& in ) const{
+                result_type seed = 0;
+                hash_combine( seed, in.first );
+                hash_combine( seed, in.second );
+                return seed;
+            }
+        };
+    
+    template<>//for the computed_tables
+        struct hash<tuple<uint32_t, uint32_t>>{
+            using argument_type = tuple<uint32_t, uint32_t>;
+            using result_type = size_t;
+            result_type operator() ( argument_type const& in ) const{
+                result_type seed = 0;
+                hash_combine( seed, get<0>(in) );
+                hash_combine( seed, get<1>(in) );
+                return seed;
+            }
+        };
+        
+        template<>//for the ITE computed_table
+            struct hash<tuple<uint32_t, uint32_t, uint32_t>>{
+                using argument_type = tuple<uint32_t, uint32_t, uint32_t>;
+                using result_type = size_t;
+                result_type operator() ( argument_type const& in ) const{
+                    result_type seed = 0;
+                    hash_combine( seed, get<0>(in) );
+                    hash_combine( seed, get<1>(in) );
+                    hash_combine( seed, get<2>(in) );
+                    return seed;
+                }
+            };
+            
 }
 
 class BDD{
@@ -102,9 +124,6 @@ public:
     explicit BDD( uint32_t num_vars )
     : unique_table( num_vars ), num_invoke_not( 0u ), num_invoke_and( 0u ), num_invoke_or( 0u ), 
     num_invoke_xor( 0u ), num_invoke_ite( 0u ){
-        //old version:
-        //nodes.emplace_back( Node({num_vars, 0, 0}) ); /* constant 0 */
-        //nodes.emplace_back( Node({num_vars, 1, 1}) ); /* constant 1 */
 
         /* `nodes` is initialized with two `Node`s representing the terminal (constant) nodes.
         * Their `v` is `num_vars` and their indices are 0 and 1.
@@ -251,7 +270,9 @@ public:
 
     /* Compute f ^ g */
     signal_t XOR(signal_t fs, signal_t gs) {
-        //std::cout<<"XOR f: "<<(fs>>1)<<" g: "<<(gs>>1)<<std::endl;
+        
+        
+        
         //adapt from signal to index:
         index_t f = get_index(fs);
         bool fc = is_complemented(fs);
@@ -634,10 +655,10 @@ private:
         * See the implementation of `unique` for example usage. */
 
         // /* Computed tables for each operation type. */
-        // std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_AND;
-        // std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_OR;
-        // std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_XOR;
-        // std::unordered_map<std::tuple<signal_t, signal_t, signal_t>, signal_t> computed_table_ITE;
+        std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_AND;
+        std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_OR;
+        std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_XOR;
+        std::unordered_map<std::tuple<signal_t, signal_t, signal_t>, signal_t> computed_table_ITE;
 
         /* statistics */
         uint64_t num_invoke_not, num_invoke_and, num_invoke_or, num_invoke_xor, num_invoke_ite;
