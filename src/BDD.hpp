@@ -65,13 +65,14 @@ private:
     inline signal_t make_signal( index_t index, bool complement = false ) const{
         return complement ? ( index << 1 ) + 1 : index << 1;
         //+1 to indicate complemented
-        //MSB=1 => bubble=complemented
+        //LSB=1 => bubble=complemented
     }
 
     //extract the node index from a signal
     inline index_t get_index( signal_t signal ) const{
+        //std::cout<<"get_index: id: "<<( signal >> 1 )<<" size: "<<nodes.size() <<std::endl;
         assert( ( signal >> 1 ) < nodes.size() );
-        return signal >> 1;
+        return (signal >> 1);
     }
     
     //change only the complement of a signal
@@ -81,16 +82,18 @@ private:
     
     //toggle the complement of a signal
     inline signal_t toggle_complemented(signal_t signal) const{
-        return is_complemented(signal) ? get_index(signal) << 1 : ( get_index(signal) << 1 ) + 1;
+        return is_complemented(signal) ? (signal&~0x1) : (signal|0x1);
+        //return is_complemented(signal) ? (get_index(signal) << 1) : (( get_index(signal) << 1 ) + 1);
     }
 
     //extract complemented from a signal
     inline bool is_complemented( signal_t signal ) const{
-        return signal & 0x1;
+        return (signal & 0x1);
     }
     
     //return the node from the signal (shortcut)
     inline Node get_node( signal_t signal ) const{
+        //std::cout<<"get_node signal: "<<(signal>>1)<<std::endl;
         return nodes[get_index( signal )];
     }
   
@@ -151,6 +154,8 @@ public:
     /* Look up (if exist) or build (if not) the node with variable `var`,
     * THEN child `T`, and ELSE child `E`. */
     signal_t unique( var_t var, signal_t Ts, signal_t Es ) {
+        //std::cout<<"unique: var: "<<var<<" T: "<< (Ts>>1)<<" E: "<< (Es>>1)<<std::endl;
+        
         //adapt from signal to index:
         index_t t = get_index(Ts);
         index_t e = get_index(Es);
@@ -218,8 +223,10 @@ public:
 
     /* Compute ~f */
     signal_t NOT(signal_t fs) {
-        signal_t sig = make_signal(fs, !is_complemented(fs));
-        return unique( get_node(sig).v, get_node(sig).Ts, get_node(sig).Es );
+        //signal_t sig = toggle_complemented(fs);
+        return toggle_complemented(fs);
+        //return unique( get_node(fs).v, toggle_complemented(get_node(fs).Ts), toggle_complemented(get_node(sig).Es) );
+        //return unique( get_node(sig).v, get_node(sig).Ts, get_node(sig).Es );
         
         //adapt from signal to index:
         // index_t f = get_index(fs);
@@ -244,9 +251,12 @@ public:
 
     /* Compute f ^ g */
     signal_t XOR(signal_t fs, signal_t gs) {
+        //std::cout<<"XOR f: "<<(fs>>1)<<" g: "<<(gs>>1)<<std::endl;
         //adapt from signal to index:
         index_t f = get_index(fs);
+        bool fc = is_complemented(fs);
         index_t g = get_index(gs);
+        bool gc = is_complemented(gs);
         
         assert( f < nodes.size() && "Make sure f exists." );
         assert( g < nodes.size() && "Make sure g exists." );
@@ -280,20 +290,20 @@ public:
         signal_t f0s, f1s, g0s, g1s;
         if( F.v < G.v ) {/* F is on top of G */
             x = F.v;
-            f0s = F.Es;
-            f1s = F.Ts;
+            f0s = fc ? toggle_complemented(F.Es) : F.Es;
+            f1s = fc ? toggle_complemented(F.Ts) : F.Ts;
             g0s = g1s = gs;
         } else if( G.v < F.v ) {/* G is on top of F */
             x = G.v;
             f0s = f1s = fs;
-            g0s = G.Es;
-            g1s = G.Ts;
+            g0s = gc ? toggle_complemented(G.Es) : G.Es;
+            g1s = gc ? toggle_complemented(G.Ts) : G.Ts;
         } else {/* F and G are at the same level */
             x = F.v;
-            f0s = F.Es;
-            f1s = F.Ts;
-            g0s = G.Es;
-            g1s = G.Ts;
+            f0s = fc ? toggle_complemented(F.Es) : F.Es;
+            f1s = fc ? toggle_complemented(F.Ts) : F.Ts;
+            g0s = gc ? toggle_complemented(G.Es) : G.Es;
+            g1s = gc ? toggle_complemented(G.Ts) : G.Ts;
         }
 
         signal_t const r0s = XOR(f0s, g0s);
@@ -305,7 +315,9 @@ public:
     signal_t AND(signal_t fs, signal_t gs) {
         //adapt from signal to index:
         index_t f = get_index(fs);
+        bool fc = is_complemented(fs);
         index_t g = get_index(gs);
+        bool gc = is_complemented(gs);
         
         assert( f < nodes.size() && "Make sure f exists." );
         assert( g < nodes.size() && "Make sure g exists." );
@@ -336,20 +348,20 @@ public:
         signal_t f0s, f1s, g0s, g1s;
         if( F.v < G.v ) {/* F is on top of G */
             x = F.v;
-            f0s = F.Es;
-            f1s = F.Ts;
+            f0s = fc ? toggle_complemented(F.Es) : F.Es;
+            f1s = fc ? toggle_complemented(F.Ts) : F.Ts;
             g0s = g1s = gs;
         } else if( G.v < F.v ) {/* G is on top of F */
             x = G.v;
             f0s = f1s = fs;
-            g0s = G.Es;
-            g1s = G.Ts;
+            g0s = gc ? toggle_complemented(G.Es) : G.Es;
+            g1s = gc ? toggle_complemented(G.Ts) : G.Ts;
         } else {/* F and G are at the same level */
             x = F.v;
-            f0s = F.Es;
-            f1s = F.Ts;
-            g0s = G.Es;
-            g1s = G.Ts;
+            f0s = fc ? toggle_complemented(F.Es) : F.Es;
+            f1s = fc ? toggle_complemented(F.Ts) : F.Ts;
+            g0s = gc ? toggle_complemented(G.Es) : G.Es;
+            g1s = gc ? toggle_complemented(G.Ts) : G.Ts;
         }
 
         signal_t const r0s = AND( f0s, g0s );
@@ -389,20 +401,20 @@ public:
         signal_t f0s, f1s, g0s, g1s;
         if( F.v < G.v ) {/* F is on top of G */
             x = F.v;
-            f0s = F.Es;
-            f1s = F.Ts;
+            f0s = fc ? toggle_complemented(F.Es) : F.Es;
+            f1s = fc ? toggle_complemented(F.Ts) : F.Ts;
             g0s = g1s = gs;
         } else if( G.v < F.v ) {/* G is on top of F */
             x = G.v;
             f0s = f1s = fs;
-            g0s = G.Es;
-            g1s = G.Ts;
+            g0s = gc ? toggle_complemented(G.Es) : G.Es;
+            g1s = gc ? toggle_complemented(G.Ts) : G.Ts;
         } else {/* F and G are at the same level */
             x = F.v;
-            f0s = F.Es;
-            f1s = F.Ts;
-            g0s = G.Es;
-            g1s = G.Ts;
+            f0s = fc ? toggle_complemented(F.Es) : F.Es;
+            f1s = fc ? toggle_complemented(F.Ts) : F.Ts;
+            g0s = gc ? toggle_complemented(G.Es) : G.Es;
+            g1s = gc ? toggle_complemented(G.Ts) : G.Ts;
         }
 
         signal_t const r0s = OR(f0s, g0s);
@@ -413,76 +425,78 @@ public:
     /* Compute ITE(f, g, h), i.e., f ? g : h */
     index_t ITE( signal_t fs, signal_t gs, signal_t hs ) {
         //adapt from signal to index:
-        // index_t f = get_index(fs);
-        // bool fc = is_complemented(fs);
-        // index_t g = get_index(gs);
-        // bool gc = is_complemented(gs);
+        index_t f = get_index(fs);
+        bool fc = is_complemented(fs);
+        index_t g = get_index(gs);
+        bool gc = is_complemented(gs);
+        index_t h = get_index(hs);
+        bool hc = is_complemented(hs);
         
-        //shannon exp: f = f.g + !f.h
-        signal_t sig = OR( AND(fs, gs), AND(NOT(fs), hs) );
-        return unique( get_node(sig).v, get_node(sig).Ts, get_node(sig).Es );
+        //longer version: shannon exp: f = f.g + !f.h
+        // signal_t sig = OR( AND(fs, gs), AND(NOT(fs), hs) );
+        // return unique( get_node(sig).v, get_node(sig).Ts, get_node(sig).Es );
         
-        // assert( f < nodes.size() && "Make sure f exists." );
-        // assert( g < nodes.size() && "Make sure g exists." );
-        // assert( h < nodes.size() && "Make sure h exists." );
-        // ++num_invoke_ite;
-        // 
-        // /* trivial cases */
-        // if ( f == constant( true ) ) {
-        //     return g;
-        // }
-        // if ( f == constant( false ) ) {
-        //     return h;
-        // }
-        // if ( g == h ) {
-        //     return g;
-        // }
-        // 
-        // Node const& F = nodes[f];
-        // Node const& G = nodes[g];
-        // Node const& H = nodes[h];
-        // var_t x;
-        // index_t f0, f1, g0, g1, h0, h1;
-        // if ( F.v <= G.v && F.v <= H.v ) {/* F is not lower than both G and H */
-        //     x = F.v;
-        //     f0 = F.E;
-        //     f1 = F.T;
-        //     if ( G.v == F.v ){
-        //         g0 = G.E;
-        //         g1 = G.T;
-        //     } else {
-        //         g0 = g1 = g;
-        //     }
-        //     if ( H.v == F.v ) {
-        //         h0 = H.E;
-        //         h1 = H.T;
-        //     } else {
-        //         h0 = h1 = h;
-        //     }
-        // } else {/* F.v > min(G.v, H.v) */
-        //     f0 = f1 = f;
-        //     if ( G.v < H.v ) {
-        //         x = G.v;
-        //         g0 = G.E;
-        //         g1 = G.T;
-        //         h0 = h1 = h;
-        //     } else if ( H.v < G.v ) {
-        //         x = H.v;
-        //         g0 = g1 = g;
-        //         h0 = H.E;
-        //         h1 = H.T;
-        //     } else { /* G.v == H.v */
-        //         x = G.v;
-        //         g0 = G.E;
-        //         g1 = G.T;
-        //         h0 = H.E;
-        //         h1 = H.T;
-        //     }
-        // }
-        // 
-        // index_t const r0 = ITE( f0, g0, h0 );
-        // index_t const r1 = ITE( f1, g1, h1 );
-        // return unique( x, r1, r0 );
+        assert( f < nodes.size() && "Make sure f exists." );
+        assert( g < nodes.size() && "Make sure g exists." );
+        assert( h < nodes.size() && "Make sure h exists." );
+        ++num_invoke_ite;
+        
+        /* trivial cases */
+        if ( fs == constant_sig(true) ){//ITE(1, g, h)=g
+            return gs;
+        }
+        if ( fs == constant_sig(false) ){//ITE(0, g, h)=0
+            return hs;
+        }
+        if ( gs == hs ){//ITE(f, g, g)=g
+            return gs;
+        }
+        
+        Node const& F = nodes[f];
+        Node const& G = nodes[g];
+        Node const& H = nodes[h];
+        var_t x;
+        signal_t f0s, f1s, g0s, g1s, h0s, h1s;
+        if ( F.v <= G.v && F.v <= H.v ) {/* F is not lower than both G and H */
+            x = F.v;
+            f0s = fc ? toggle_complemented(F.Es) : F.Es;
+            f1s = fc ? toggle_complemented(F.Ts) : F.Ts;
+            if ( G.v == F.v ){
+                g0s = gc ? toggle_complemented(G.Es) : G.Es;
+                g1s = gc ? toggle_complemented(G.Ts) : G.Ts;
+            } else {
+                g0s = g1s = gs;
+            }
+            if ( H.v == F.v ) {
+                h0s = hc ? toggle_complemented(H.Es) : H.Es;
+                h1s = hc ? toggle_complemented(H.Ts) : H.Ts;
+            } else {
+                h0s = h1s = hs;
+            }
+        } else {/* F.v > min(G.v, H.v) */
+            f0s = f1s = fs;
+            if ( G.v < H.v ) {
+                x = G.v;
+                g0s = gc ? toggle_complemented(G.Es) : G.Es;
+                g1s = gc ? toggle_complemented(G.Ts) : G.Ts;
+                h0s = h1s = hs;
+            } else if ( H.v < G.v ) {
+                x = H.v;
+                g0s = g1s = gs;
+                h0s = hc ? toggle_complemented(H.Es) : H.Es;
+                h1s = hc ? toggle_complemented(H.Ts) : H.Ts;
+            } else { /* G.v == H.v */
+                x = G.v;
+                g0s = gc ? toggle_complemented(G.Es) : G.Es;
+                g1s = gc ? toggle_complemented(G.Ts) : G.Ts;
+                h0s = hc ? toggle_complemented(H.Es) : H.Es;
+                h1s = hc ? toggle_complemented(H.Ts) : H.Ts;
+            }
+        }
+        
+        index_t const r0s = ITE( f0s, g0s, h0s );
+        index_t const r1s = ITE( f1s, g1s, h1s );
+        return unique( x, r1s, r0s );
     }
 
     /**********************************************************/
@@ -499,7 +513,7 @@ public:
             os << "  ";
         }
         if ( ( fs == constant_sig(true) ) || ( fs == constant_sig(false) ) ){//display cst, only 0
-            os << "node " << f << ": constant " << f <<(fc ? " (c)":" (nc)")<< std::endl;
+            os << "node " << f << ": constant 1" <<(fc ? " (c)":" (nc)")<< std::endl;
         } else {
             os << "node " << f <<(fc ? " (c)":" (nc)")<< ": var = " << nodes[f].v << ", T = " << get_index(nodes[f].Ts) << ", E = " << get_index(nodes[f].Es) << std::endl;
         
