@@ -271,7 +271,15 @@ public:
     /* Compute f ^ g */
     signal_t XOR(signal_t fs, signal_t gs) {
         
-        
+        //check if already computed
+        auto it = computed_table_XOR.find( std::make_tuple(fs, gs) );
+        if( it != computed_table_XOR.end() ){//if already computed, return it
+            return it->second;
+        }
+        it = computed_table_XOR.find( std::make_tuple(gs, fs) );
+        if( it != computed_table_XOR.end() ){//if already computed, return it
+            return it->second;
+        }
         
         //adapt from signal to index:
         index_t f = get_index(fs);
@@ -285,23 +293,29 @@ public:
 
         /* trivial cases */
         if ( fs == gs ) {//x^x=0
+            computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), constant_sig(false) ) );
             return constant_sig(false);
         }
         if ( fs == constant_sig(false) ) {//0^x=x
+            computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), gs ) );
             return gs;
         }
         if ( gs == constant_sig(false) ) {//x^0=x
+            computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), fs ) );
             return fs;
         }
         if ( fs == constant_sig(true) ) {//1^x=!x
+            computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), NOT(gs) ) );
             return NOT(gs);
         }
         if ( gs == constant_sig(true) ) {//x^1=!x
+            computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), NOT(fs) ) );
             return NOT(fs);
         }
         if ( f == g ) {//case f==!g, x^!x=1
             //the case fs==gs has already been evaluated before, so
             //if f==g => only the complement is different => f==!g
+            computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), constant_sig(true) ) );
             return constant_sig(true);
         }
 
@@ -329,11 +343,24 @@ public:
 
         signal_t const r0s = XOR(f0s, g0s);
         signal_t const r1s = XOR(f1s, g1s);
-        return unique(x, r1s, r0s);
+        signal_t ret = unique(x, r1s, r0s);
+        computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), ret ) );
+        return ret;
     }
 
     /* Compute f & g */
     signal_t AND(signal_t fs, signal_t gs) {
+        
+        //check if already computed
+        auto it = computed_table_AND.find( std::make_tuple(fs, gs) );
+        if( it != computed_table_AND.end() ){//if already computed, return it
+            return it->second;
+        }
+        it = computed_table_AND.find( std::make_tuple(gs, fs) );
+        if( it != computed_table_AND.end() ){//if already computed, return it
+            return it->second;
+        }
+        
         //adapt from signal to index:
         index_t f = get_index(fs);
         bool fc = is_complemented(fs);
@@ -346,20 +373,25 @@ public:
 
         /* trivial cases */
         if( fs == constant_sig(false) || gs == constant_sig(false) ){//0&x=0
+            computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), constant_sig(false) ) );
             return constant_sig(false);
         }
         if( fs == constant_sig(true) ){//1&x=x
+            computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), gs) );
             return gs;
         }
         if( gs == constant_sig(true) ){//x&1=x
+            computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), fs ) );
             return fs;
         }
         if( fs == gs ){//x&x=x
+            computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), fs ) );
             return fs;
         }
         if( f == g ){//case f==!g, x&!x=0
             //the case fs==gs has already been evaluated before, so
             //if f==g => only the complement is different => f==!g
+            computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), constant_sig(false) ) );
             return constant_sig(false);
         }
 
@@ -387,11 +419,24 @@ public:
 
         signal_t const r0s = AND( f0s, g0s );
         signal_t const r1s = AND( f1s, g1s );
-        return unique(x, r1s, r0s);
+        signal_t ret = unique(x, r1s, r0s);
+        computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), ret ) );//store result
+        return ret;
     }
 
     /* Compute f | g */
     signal_t OR(signal_t fs, signal_t gs) {
+        
+        //check if already computed
+        auto it = computed_table_OR.find( std::make_tuple(fs, gs) );
+        if( it != computed_table_OR.end() ){//if already computed, return it
+            return it->second;
+        }
+        it = computed_table_OR.find( std::make_tuple(gs, fs) );
+        if( it != computed_table_OR.end() ){//if already computed, return it
+            return it->second;
+        }
+        
         //adapt from signal to index:
         index_t f = get_index(fs);
         bool fc = is_complemented(fs);
@@ -404,15 +449,19 @@ public:
 
         /* trivial cases */
         if( fs == constant_sig(true) || gs == constant_sig(true) ){//1+x=1
+            computed_table_OR.emplace(std::make_pair(std::make_tuple(fs, gs), constant_sig(true) ) );
             return constant_sig(true);
         }
         if( fs == constant_sig(false) ){//0+x=x
+            computed_table_OR.emplace(std::make_pair(std::make_tuple(fs, gs), gs ) );
             return gs;
         }
         if( gs == constant_sig(false) ){//x+0=x
+            computed_table_OR.emplace(std::make_pair(std::make_tuple(fs, gs), fs ) );
             return fs;
         }
         if( fs == gs ){//x+x=x
+            computed_table_OR.emplace(std::make_pair(std::make_tuple(fs, gs), fs ) );
             return fs;
         }
 
@@ -440,11 +489,24 @@ public:
 
         signal_t const r0s = OR(f0s, g0s);
         signal_t const r1s = OR(f1s, g1s);
-        return unique(x, r1s, r0s);
+        signal_t ret = unique(x, r1s, r0s);
+        computed_table_OR.emplace(std::make_pair(std::make_tuple(fs, gs), ret) );
+        return ret;
     }
 
     /* Compute ITE(f, g, h), i.e., f ? g : h */
-    index_t ITE( signal_t fs, signal_t gs, signal_t hs ) {
+    signal_t ITE( signal_t fs, signal_t gs, signal_t hs ) {
+        
+        //check if already computed
+        auto it = computed_table_ITE.find( std::make_tuple(fs, gs, hs) );
+        if( it != computed_table_ITE.end() ){//if already computed, return it
+            return it->second;
+        }
+        it = computed_table_ITE.find( std::make_tuple(NOT(fs), hs, gs) );
+        if( it != computed_table_ITE.end() ){//if already computed, return it
+            return it->second;
+        }
+        
         //adapt from signal to index:
         index_t f = get_index(fs);
         bool fc = is_complemented(fs);
@@ -464,12 +526,15 @@ public:
         
         /* trivial cases */
         if ( fs == constant_sig(true) ){//ITE(1, g, h)=g
+            computed_table_ITE.emplace(std::make_pair(std::make_tuple(fs, gs, hs), gs) );
             return gs;
         }
         if ( fs == constant_sig(false) ){//ITE(0, g, h)=0
+            computed_table_ITE.emplace(std::make_pair(std::make_tuple(fs, gs, hs), hs) );
             return hs;
         }
         if ( gs == hs ){//ITE(f, g, g)=g
+            computed_table_ITE.emplace(std::make_pair(std::make_tuple(fs, gs, hs), gs) );
             return gs;
         }
         
@@ -515,9 +580,11 @@ public:
             }
         }
         
-        index_t const r0s = ITE( f0s, g0s, h0s );
-        index_t const r1s = ITE( f1s, g1s, h1s );
-        return unique( x, r1s, r0s );
+        signal_t const r0s = ITE( f0s, g0s, h0s );
+        signal_t const r1s = ITE( f1s, g1s, h1s );
+        signal_t ret = unique( x, r1s, r0s );
+        computed_table_ITE.emplace(std::make_pair(std::make_tuple(fs, gs, hs), ret) );
+        return ret;
     }
 
     /**********************************************************/
