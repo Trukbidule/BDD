@@ -134,6 +134,7 @@ public:
 
         //new version: the constant 1 is at index 0, and its T and E point to itself
         nodes.emplace_back( Node({num_vars, 0, 0}) ); /* constant 1 */
+        ref_count.emplace_back(0);//count
     }
 
     /**********************************************************/
@@ -210,11 +211,15 @@ public:
                 toggle_complemented( sig.at(i) );
             }
             
+            //new ref to this node => increase ref_count
+            ref_count.at(it->second) = ref_count.at(it->second)+1;
             return make_signal(it->second, false);
         } else {
             /* Create a new node and insert it to the unique table. */
             index_t const new_index = nodes.size();
             nodes.emplace_back( Node({var, Ts, Es}) );
+            ref_count.emplace_back(1);//add one reference to this node
+            
             unique_table[var][{Ts, Es}] = new_index;
             return make_signal(new_index, false);
         }
@@ -227,13 +232,15 @@ public:
   
     /********************* Ref Operations *********************/
   
-    index_t ref( index_t f ){
-        //TODO PHASE 2
-        return f;
+    signal_t ref( signal_t fs ){
+        //assert( get_index(fs) < num_vars());
+        ref_count.at(get_index(fs))++;
+        return fs;
     }
 
-    void deref(index_t f){
-        //TODO PHASE 2
+    void deref(signal_t fs){
+        //assert( get_index(fs) < num_vars());
+        ref_count.at(get_index(fs))--;
     }
 
     /**********************************************************/
@@ -647,8 +654,10 @@ public:
 
     /* Whether `f` is dead (having a reference count of 0). */
     bool is_dead( index_t f ) const{
-        /* TODO PHASE 2*/
-        return false;
+        if(ref_count.at(f) != 0)
+            return false;
+        else
+            return true;
     }
 
     /* Get the number of living nodes in the whole package, excluding constants. */
@@ -716,6 +725,7 @@ private:
 
     private:
         std::vector<Node> nodes;
+        std::vector<uint32_t> ref_count;
         std::vector<std::unordered_map<std::pair<index_t, index_t>, index_t>> unique_table;
         /* `unique_table` is a vector of `num_vars` maps storing the built nodes of each variable.
         * Each map maps from a pair of node indices (T, E) to a node index, if it exists.
