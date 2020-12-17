@@ -162,7 +162,7 @@ public:
         return mask;
     }
 
-    //defined as inline later, after the operators
+    //defined as inline later, after the operators, not asked here
     // Truth_Table positive_cofactor( uint8_t const var ) const;
     // Truth_Table negative_cofactor( uint8_t const var ) const;
     // Truth_Table derivative( uint8_t const var ) const;
@@ -313,7 +313,7 @@ inline bool operator!=(Truth_Table const& tt1, Truth_Table const& tt2){
 // }
 
 /* Returns the truth table of f(x_0, ..., x_num_var) = x_var (or its complement). */
-//to improve later
+//generate sequence on the fly, could be optimized to work block by block
 Truth_Table create_tt_nth_var( uint8_t const num_var, uint8_t const var, bool const polarity = true ){
     assert (var < num_var );
     
