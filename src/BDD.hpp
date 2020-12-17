@@ -11,8 +11,7 @@
 #include <string>
 #include <vector>
 
-/* These are just some hacks to hash std::pair (for the unique table).
- * You don't need to understand this part. */
+//Template definitions, for the hash function (of unique_table and computed_table)
 namespace std{
     template<class T>
         inline void hash_combine( size_t& seed, T const& v ){
@@ -43,18 +42,18 @@ namespace std{
             }
         };
         
-        template<>//for the ITE computed_table
-            struct hash<tuple<uint32_t, uint32_t, uint32_t>>{
-                using argument_type = tuple<uint32_t, uint32_t, uint32_t>;
-                using result_type = size_t;
-                result_type operator() ( argument_type const& in ) const{
-                    result_type seed = 0;
-                    hash_combine( seed, get<0>(in) );
-                    hash_combine( seed, get<1>(in) );
-                    hash_combine( seed, get<2>(in) );
-                    return seed;
-                }
-            };
+    template<>//for the ITE computed_table
+        struct hash<tuple<uint32_t, uint32_t, uint32_t>>{
+            using argument_type = tuple<uint32_t, uint32_t, uint32_t>;
+            using result_type = size_t;
+            result_type operator() ( argument_type const& in ) const{
+                result_type seed = 0;
+                hash_combine( seed, get<0>(in) );
+                hash_combine( seed, get<1>(in) );
+                hash_combine( seed, get<2>(in) );
+                return seed;
+            }
+        };
             
 }
 
@@ -113,7 +112,6 @@ private:
     
     //return the node from the signal (shortcut)
     inline Node get_node( signal_t signal ) const{
-        //std::cout<<"get_node signal: "<<(signal>>1)<<std::endl;
         return nodes[get_index( signal )];
     }
   
@@ -132,7 +130,8 @@ public:
 
         //new version: the constant 1 is at index 0, and its T and E point to itself
         nodes.emplace_back( Node({num_vars, 0, 0}) ); /* constant 1 */
-        ref_count.emplace_back(0);//count
+        //create the constant reference count(required to ensure same index for the others)
+        ref_count.emplace_back(0);
     }
 
     /**********************************************************/
@@ -146,8 +145,7 @@ public:
 
     /* Get the (index of) constant node. */
     index_t constant_ind() const {
-        //return value ? 1 : 0;
-        return 0;//now only 1 at index 0
+        return 0;//now the only constant is 1, placed at index 0, with the var=num_var
     }
 
     /* Get the (signal of) constant node. */
@@ -204,7 +202,7 @@ public:
         signal_t newEs = Es;
         bool comp = false;//by default: not complemented
         
-        /* Reduction rule: remove the complement on T edge PART 1*/
+        /* Reduction rule: remove the complement on T edge */
         if( is_complemented(Ts) ){//if complement on Ts:
             newTs = toggle_complemented(Ts); //remove the complement of Ts
             newEs = toggle_complemented(Es); //toggle the complement of Es
@@ -220,14 +218,13 @@ public:
         /* Look up in the unique table. */
         const auto it = unique_table[var].find( {newTs, newEs} );
         if ( it != unique_table[var].end()){
-            /* The required node already exists. Return it. */
-            
+            /* If the required node already exists. Return it. */
             return make_signal(it->second, comp);
         } else {
             /* Create a new node and insert it to the unique table. */
             index_t const new_index = nodes.size();
             nodes.emplace_back( Node({var, newTs, newEs}) );
-            ref_count.emplace_back(0);//add a reference for this node
+            ref_count.emplace_back(0);//creat a reference for this node
             
             unique_table[var][{newTs, newEs}] = new_index;
             return make_signal(new_index, comp);
@@ -258,6 +255,7 @@ public:
         _deref_rec(fs);
     }
     
+    //used to explore and derefence reccursively the nodes
     signal_t _deref_rec(signal_t fs){
         if( get_index(fs) != constant_ind() ){//if not the final node
             //decrease its ref_count if not already zero
@@ -347,6 +345,7 @@ public:
         signal_t const r0s = XOR(f0s, g0s);
         signal_t const r1s = XOR(f1s, g1s);
         signal_t ret = unique(x, r1s, r0s);
+        //add to computed table
         computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), ret ) );
         return ret;
     }
@@ -414,7 +413,8 @@ public:
         signal_t const r0s = AND( f0s, g0s );
         signal_t const r1s = AND( f1s, g1s );
         signal_t ret = unique(x, r1s, r0s);
-        computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), ret ) );//store result
+        //add to computed table
+        computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), ret ) );
         return ret;
     }
 
@@ -481,6 +481,7 @@ public:
         signal_t const r0s = OR(f0s, g0s);
         signal_t const r1s = OR(f1s, g1s);
         signal_t ret = unique(x, r1s, r0s);
+        //add to computed table
         computed_table_OR.emplace(std::make_pair(std::make_tuple(fs, gs), ret) );
         return ret;
     }
@@ -497,9 +498,9 @@ public:
         index_t h = get_index(hs);
         bool hc = is_complemented(hs);
         
-        // assert( f < nodes.size() && "Make sure f exists." );
-        // assert( g < nodes.size() && "Make sure g exists." );
-        // assert( h < nodes.size() && "Make sure h exists." );
+        assert( f < nodes.size() && "Make sure f exists." );
+        assert( g < nodes.size() && "Make sure g exists." );
+        assert( h < nodes.size() && "Make sure h exists." );
         
         //check if already computed
         auto it = computed_table_ITE.find( std::make_tuple(fs, gs, hs) );
@@ -511,7 +512,7 @@ public:
             return it->second;
         }
         
-        //longer version: shannon exp: f = f.g + !f.h
+        //test version, slower: shannon exp: f = f.g + !f.h
         // signal_t sig = OR( AND(fs, gs), AND(NOT(fs), hs) );
         // return unique( get_node(sig).v, get_node(sig).Ts, get_node(sig).Es );
 
@@ -571,6 +572,7 @@ public:
         signal_t const r0s = ITE( f0s, g0s, h0s );
         signal_t const r1s = ITE( f1s, g1s, h1s );
         signal_t ret = unique( x, r1s, r0s );
+        //add to computed table
         computed_table_ITE.emplace(std::make_pair(std::make_tuple(fs, gs, hs), ret) );
         return ret;
     }
@@ -630,6 +632,7 @@ public:
         //selection of the variables
         Truth_Table const tt_x = create_tt_nth_var( num_vars(), x );
         Truth_Table const tt_nx = create_tt_nth_var( num_vars(), x, false );
+        //build the final TT
         return ( tt_x & get_tt( fxs ) ) | ( tt_nx & get_tt( fnxs ) );
     }
 
@@ -659,7 +662,6 @@ public:
         
         assert( f < nodes.size() && "Make sure f exists." );
 
-        //still working since constant(x) gives always 0
         if ( fs == constant_sig(false) || fs == constant_sig(true) ){
             return 0u;
         }
