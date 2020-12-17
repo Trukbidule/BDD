@@ -162,7 +162,7 @@ int main()
     bdd.deref( f1 ); bdd.deref( f2 ); bdd.deref( f3 );
 
     auto const tt = bdd.get_tt( f );
-    check( tt, "01000000000000000100111100001111" );
+    passed &= check( tt, "01000000000000000100111100001111" );
     cout << "  checking BDD size (reachable nodes)";
     passed &= checkEQ( bdd.num_nodes( f ), 6 );
     cout << "  checking BDD size (living nodes)";
@@ -196,11 +196,11 @@ int main()
     bdd.deref( x5 ); bdd.deref( x6 ); bdd.deref( x7 ); bdd.deref( x8 ); bdd.deref( x9 );
 
     auto const tt1 = bdd.get_tt( f1 );
-    check( tt1, create_tt_nth_var( 10, 0 ) | create_tt_nth_var( 10, 9 ) );
+    passed &= check( tt1, create_tt_nth_var( 10, 0 ) | create_tt_nth_var( 10, 9 ) );
     auto const tt2 = bdd.get_tt( f2 );
-    check( tt2, create_tt_nth_var( 10, 4 ) ^ create_tt_nth_var( 10, 6 ) );
+    passed &= check( tt2, create_tt_nth_var( 10, 4 ) ^ create_tt_nth_var( 10, 6 ) );
     auto const tt3 = bdd.get_tt( f3 );
-    check( tt3, ~create_tt_nth_var( 10, 2 ) | ~create_tt_nth_var( 10, 6 ) );
+    passed &= check( tt3, ~create_tt_nth_var( 10, 2 ) | ~create_tt_nth_var( 10, 6 ) );
 
     cout << "  checking BDD size (reachable nodes) of f1";
     passed &= checkEQ( bdd.num_nodes( f1 ), 2 );
