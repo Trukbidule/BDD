@@ -92,20 +92,18 @@ private:
 
     //extract the node index from a signal
     inline index_t get_index( signal_t signal ) const{
-        //std::cout<<"get_index: id: "<<( signal >> 1 )<<" size: "<<nodes.size() <<std::endl;
         assert( ( signal >> 1 ) < nodes.size() );
         return (signal >> 1);
-    }
-    
-    //change only the complement of a signal
-    inline signal_t set_complemented(signal_t signal, bool complement) const{
-        return complement ? ( get_index(signal) << 1 ) + 1 : get_index(signal) << 1;
     }
     
     //toggle the complement of a signal
     inline signal_t toggle_complemented(signal_t signal) const{
         return is_complemented(signal) ? (signal&~0x1) : (signal|0x1);
-        //return is_complemented(signal) ? (get_index(signal) << 1) : (( get_index(signal) << 1 ) + 1);
+    }
+    
+    //change only the complement of a given signal
+    inline signal_t set_complemented(signal_t signal, bool comp) const{
+        return comp ? (signal | 0x1) : (signal & ~(0x1));
     }
 
     //extract complemented from a signal
@@ -158,70 +156,81 @@ public:
     }
     
     //find the signals incomming on the node n
-    std::vector<signal_t> get_signals_on(index_t n){
-        std::vector<signal_t> sig;
-        //scan the outgoing signal of all nodes, skip the constant at i=0
-        for(index_t i=1; i<this->nodes.size(); i++){
-            //if a signal from node i points to n: add it to sig (safety: avoid loop)
-            if( (get_index(this->nodes[i].Ts) == n) && (get_index(this->nodes[i].Ts) != i) )
-                sig.emplace_back(this->nodes[i].Ts);
-            if( (get_index(this->nodes[i].Es) == n) && (get_index(this->nodes[i].Es) != i) )
-                sig.emplace_back(this->nodes[i].Es);
-        }
-        return sig;
-    }
+    // std::vector<signal_t*> get_signals_on(index_t n){
+    //     std::vector<signal_t*> sig;
+    //     //scan the outgoing signal of all nodes, skip the constant at i=0
+    //     for(index_t i=1; i<this->nodes.size(); i++){
+    //         //if a signal from node i points to n: add it to sig (safety: avoid loop)
+    //         if( (get_index(this->nodes[i].Ts) == n) && (get_index(this->nodes[i].Ts) != i) )
+    //             sig.emplace_back( &(this->nodes[i].Ts) );
+    //         if( (get_index(this->nodes[i].Es) == n) && (get_index(this->nodes[i].Es) != i) )
+    //             sig.emplace_back( &(this->nodes[i].Es) );
+    //     }
+    //     return sig;
+    // }
+    
+    //find the node having as a child the node n
+    // std::vector<index_t> get_nodes_to(index_t n){
+    //     std::vector<index_t> ret;
+    //     //scan the outgoing signal of all nodes, skip the constant at i=0
+    //     for(index_t i=1; i<this->nodes.size(); i++){
+    //         //if a node has as child n, add it to the list
+    //         if(get_index(this->nodes[i].Ts) == n)
+    //             ret.emplace_back(i);
+    //         else if(get_index(this->nodes[i].Es) == n)
+    //             ret.emplace_back(i);
+    //     }
+    //     return ret;
+    // }
 
     /* Look up (if exist) or build (if not) the node with variable `var`,
     * THEN child `T`, and ELSE child `E`. */
     signal_t unique( var_t var, signal_t Ts, signal_t Es ) {
-        //std::cout<<"unique: var: "<<var<<" T: "<< (Ts>>1)<<" E: "<< (Es>>1)<<std::endl;
+        //std::cout<<"\t unique: var: "<<var<<" T: "<< (Ts>>1)<<" (v: "<<get_node(Ts).v<<") "<<" E: "<< (Es>>1)<<" (v: "<<get_node(Es).v<<") "<<std::endl;
         
         //adapt from signal to index:
         index_t t = get_index(Ts);
         index_t e = get_index(Es);
         
-        //std::cout<< "var:" <<std::to_string(var) << "num_var:" <<std::to_string(num_vars())<<std::endl;
         assert( var < num_vars() && "Variables range from 0 to `num_vars - 1`. var:");
         assert( t < nodes.size() && "Make sure the children exist." );
         assert( e < nodes.size() && "Make sure the children exist." );
+        
         assert( nodes[t].v > var && "With static variable order, children can only be below the node." );
         assert( nodes[e].v > var && "With static variable order, children can only be below the node." );
-
-        /* Reduction rule: Identical children */
-        if ( Ts == Es ) {
-            return Ts;
-        }
+        
+        //final values
+        signal_t newTs = Ts;
+        signal_t newEs = Es;
+        bool comp = false;//by default: not complemented
+        
         /* Reduction rule: remove the complement on T edge PART 1*/
         if( is_complemented(Ts) ){//if complement on Ts:
-            toggle_complemented(Ts); //remove the complement of Ts
-            toggle_complemented(Es); //toggle the complement of Es
+            newTs = toggle_complemented(Ts); //remove the complement of Ts
+            newEs = toggle_complemented(Es); //toggle the complement of Es
             //toggle the complement of edges incomming on the node in part 2
+            comp = true;
+        }
+        
+        /* Reduction rule: Identical children*/
+        if(Ts == Es ) {//if identical children
+            return make_signal(get_index(Ts), comp); //skip the node
         }
 
-
         /* Look up in the unique table. */
-        const auto it = unique_table[var].find( {Ts, Es} );
-        if ( it != unique_table[var].end() ){
+        const auto it = unique_table[var].find( {newTs, newEs} );
+        if ( it != unique_table[var].end()){
             /* The required node already exists. Return it. */
             
-            /* Reduction rule: remove the complement on T edge PART 2*/
-            //if the node exist: toggle the complement of edges incomming onto it
-            std::vector<signal_t> sig = get_signals_on(it->second);
-            for(int i=0; i<sig.size(); i++){
-                toggle_complemented( sig.at(i) );
-            }
-            
-            //new ref to this node => increase ref_count
-            ref_count.at(it->second) = ref_count.at(it->second)+1;
-            return make_signal(it->second, false);
+            return make_signal(it->second, comp);
         } else {
             /* Create a new node and insert it to the unique table. */
             index_t const new_index = nodes.size();
-            nodes.emplace_back( Node({var, Ts, Es}) );
-            ref_count.emplace_back(1);//add one reference to this node
+            nodes.emplace_back( Node({var, newTs, newEs}) );
+            ref_count.emplace_back(0);//add a reference for this node
             
-            unique_table[var][{Ts, Es}] = new_index;
-            return make_signal(new_index, false);
+            unique_table[var][{newTs, newEs}] = new_index;
+            return make_signal(new_index, comp);
         }
     }
 
@@ -232,15 +241,33 @@ public:
   
     /********************* Ref Operations *********************/
   
+    //mark a signal and all its children as "in use"
     signal_t ref( signal_t fs ){
         //assert( get_index(fs) < num_vars());
-        ref_count.at(get_index(fs))++;
+        if( get_index(fs) != constant_ind() ){//if not the final node
+            ref_count.at(get_index(fs))++;//increase its ref_count
+            //do the same to its children
+            ref(get_node(fs).Ts);
+            ref(get_node(fs).Es);
+        }
         return fs;
     }
 
+    //remove the "in use" mark of a signal and its children
     void deref(signal_t fs){
-        //assert( get_index(fs) < num_vars());
-        ref_count.at(get_index(fs))--;
+        _deref_rec(fs);
+    }
+    
+    signal_t _deref_rec(signal_t fs){
+        if( get_index(fs) != constant_ind() ){//if not the final node
+            //decrease its ref_count if not already zero
+            if(ref_count.at(get_index(fs)) > 0)
+                ref_count.at(get_index(fs))--;
+            //do the same to its children
+            _deref_rec(get_node(fs).Ts);
+            _deref_rec(get_node(fs).Es);
+        }
+        return fs;
     }
 
     /**********************************************************/
@@ -249,34 +276,21 @@ public:
 
     /* Compute ~f */
     signal_t NOT(signal_t fs) {
-        //signal_t sig = toggle_complemented(fs);
         return toggle_complemented(fs);
-        //return unique( get_node(fs).v, toggle_complemented(get_node(fs).Ts), toggle_complemented(get_node(sig).Es) );
-        //return unique( get_node(sig).v, get_node(sig).Ts, get_node(sig).Es );
-        
-        //adapt from signal to index:
-        // index_t f = get_index(fs);
-        // bool fc = is_complemented(fs);
-        // 
-        // assert( f < nodes.size() && "Make sure f exists." );
-        // ++num_invoke_not;
-        // 
-        // /* trivial cases */
-        // if ( f == constant() ) {//if cst: return opposit
-        //     return make_signal(constant(), !fc);
-        // }
-        // 
-        // Node const& F = nodes[f];
-        // var_t x = F.v;
-        // signal_t f0s = F.E, f1s = F.T;
-        // 
-        // signal_t const r0s = NOT(f0s);
-        // signal_t const r1s = NOT(f1s);
-        // return unique( x, r1s, r0s );
     }
 
     /* Compute f ^ g */
     signal_t XOR(signal_t fs, signal_t gs) {
+        ++num_invoke_xor;
+        //adapt from signal to index:
+        index_t f = get_index(fs);
+        bool fc = is_complemented(fs);
+        index_t g = get_index(gs);
+        bool gc = is_complemented(gs);
+        
+        //safety check
+        assert( f < nodes.size() && "Make sure f exists." );
+        assert( g < nodes.size() && "Make sure g exists." );
         
         //check if already computed
         auto it = computed_table_XOR.find( std::make_tuple(fs, gs) );
@@ -287,42 +301,24 @@ public:
         if( it != computed_table_XOR.end() ){//if already computed, return it
             return it->second;
         }
-        
-        //adapt from signal to index:
-        index_t f = get_index(fs);
-        bool fc = is_complemented(fs);
-        index_t g = get_index(gs);
-        bool gc = is_complemented(gs);
-        
-        assert( f < nodes.size() && "Make sure f exists." );
-        assert( g < nodes.size() && "Make sure g exists." );
-        ++num_invoke_xor;
 
         /* trivial cases */
         if ( fs == gs ) {//x^x=0
-            computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), constant_sig(false) ) );
             return constant_sig(false);
         }
         if ( fs == constant_sig(false) ) {//0^x=x
-            computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), gs ) );
             return gs;
         }
         if ( gs == constant_sig(false) ) {//x^0=x
-            computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), fs ) );
             return fs;
         }
         if ( fs == constant_sig(true) ) {//1^x=!x
-            computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), NOT(gs) ) );
             return NOT(gs);
         }
         if ( gs == constant_sig(true) ) {//x^1=!x
-            computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), NOT(fs) ) );
             return NOT(fs);
         }
-        if ( f == g ) {//case f==!g, x^!x=1
-            //the case fs==gs has already been evaluated before, so
-            //if f==g => only the complement is different => f==!g
-            computed_table_XOR.emplace(std::make_pair(std::make_tuple(fs, gs), constant_sig(true) ) );
+        if ( fs == NOT(gs) ) {//case f==!g, x^!x=1
             return constant_sig(true);
         }
 
@@ -347,7 +343,7 @@ public:
             g0s = gc ? toggle_complemented(G.Es) : G.Es;
             g1s = gc ? toggle_complemented(G.Ts) : G.Ts;
         }
-
+        
         signal_t const r0s = XOR(f0s, g0s);
         signal_t const r1s = XOR(f1s, g1s);
         signal_t ret = unique(x, r1s, r0s);
@@ -357,6 +353,17 @@ public:
 
     /* Compute f & g */
     signal_t AND(signal_t fs, signal_t gs) {
+        ++num_invoke_and;
+        
+        //adapt from signal to index:
+        index_t f = get_index(fs);
+        bool fc = is_complemented(fs);
+        index_t g = get_index(gs);
+        bool gc = is_complemented(gs);
+        
+        //safety check
+        assert( f < nodes.size() && "Make sure f exists." );
+        assert( g < nodes.size() && "Make sure g exists." );
         
         //check if already computed
         auto it = computed_table_AND.find( std::make_tuple(fs, gs) );
@@ -367,39 +374,19 @@ public:
         if( it != computed_table_AND.end() ){//if already computed, return it
             return it->second;
         }
-        
-        //adapt from signal to index:
-        index_t f = get_index(fs);
-        bool fc = is_complemented(fs);
-        index_t g = get_index(gs);
-        bool gc = is_complemented(gs);
-        
-        assert( f < nodes.size() && "Make sure f exists." );
-        assert( g < nodes.size() && "Make sure g exists." );
-        ++num_invoke_and;
 
         /* trivial cases */
         if( fs == constant_sig(false) || gs == constant_sig(false) ){//0&x=0
-            computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), constant_sig(false) ) );
             return constant_sig(false);
         }
         if( fs == constant_sig(true) ){//1&x=x
-            computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), gs) );
             return gs;
         }
         if( gs == constant_sig(true) ){//x&1=x
-            computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), fs ) );
             return fs;
         }
         if( fs == gs ){//x&x=x
-            computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), fs ) );
             return fs;
-        }
-        if( f == g ){//case f==!g, x&!x=0
-            //the case fs==gs has already been evaluated before, so
-            //if f==g => only the complement is different => f==!g
-            computed_table_AND.emplace(std::make_pair(std::make_tuple(fs, gs), constant_sig(false) ) );
-            return constant_sig(false);
         }
 
         Node const& F = nodes[f];
@@ -433,6 +420,17 @@ public:
 
     /* Compute f | g */
     signal_t OR(signal_t fs, signal_t gs) {
+        ++num_invoke_or;
+        
+        //adapt from signal to index:
+        index_t f = get_index(fs);
+        bool fc = is_complemented(fs);
+        index_t g = get_index(gs);
+        bool gc = is_complemented(gs);
+        
+        //safety check
+        assert( f < nodes.size() && "Make sure f exists." );
+        assert( g < nodes.size() && "Make sure g exists." );
         
         //check if already computed
         auto it = computed_table_OR.find( std::make_tuple(fs, gs) );
@@ -444,31 +442,17 @@ public:
             return it->second;
         }
         
-        //adapt from signal to index:
-        index_t f = get_index(fs);
-        bool fc = is_complemented(fs);
-        index_t g = get_index(gs);
-        bool gc = is_complemented(gs);
-        
-        assert( f < nodes.size() && "Make sure f exists." );
-        assert( g < nodes.size() && "Make sure g exists." );
-        ++num_invoke_or;
-
         /* trivial cases */
         if( fs == constant_sig(true) || gs == constant_sig(true) ){//1+x=1
-            computed_table_OR.emplace(std::make_pair(std::make_tuple(fs, gs), constant_sig(true) ) );
             return constant_sig(true);
         }
         if( fs == constant_sig(false) ){//0+x=x
-            computed_table_OR.emplace(std::make_pair(std::make_tuple(fs, gs), gs ) );
             return gs;
         }
         if( gs == constant_sig(false) ){//x+0=x
-            computed_table_OR.emplace(std::make_pair(std::make_tuple(fs, gs), fs ) );
             return fs;
         }
         if( fs == gs ){//x+x=x
-            computed_table_OR.emplace(std::make_pair(std::make_tuple(fs, gs), fs ) );
             return fs;
         }
 
@@ -503,6 +487,19 @@ public:
 
     /* Compute ITE(f, g, h), i.e., f ? g : h */
     signal_t ITE( signal_t fs, signal_t gs, signal_t hs ) {
+        ++num_invoke_ite;
+        
+        //adapt from signal to index:
+        index_t f = get_index(fs);
+        bool fc = is_complemented(fs);
+        index_t g = get_index(gs);
+        bool gc = is_complemented(gs);
+        index_t h = get_index(hs);
+        bool hc = is_complemented(hs);
+        
+        // assert( f < nodes.size() && "Make sure f exists." );
+        // assert( g < nodes.size() && "Make sure g exists." );
+        // assert( h < nodes.size() && "Make sure h exists." );
         
         //check if already computed
         auto it = computed_table_ITE.find( std::make_tuple(fs, gs, hs) );
@@ -514,34 +511,18 @@ public:
             return it->second;
         }
         
-        //adapt from signal to index:
-        index_t f = get_index(fs);
-        bool fc = is_complemented(fs);
-        index_t g = get_index(gs);
-        bool gc = is_complemented(gs);
-        index_t h = get_index(hs);
-        bool hc = is_complemented(hs);
-        
         //longer version: shannon exp: f = f.g + !f.h
         // signal_t sig = OR( AND(fs, gs), AND(NOT(fs), hs) );
         // return unique( get_node(sig).v, get_node(sig).Ts, get_node(sig).Es );
-        
-        assert( f < nodes.size() && "Make sure f exists." );
-        assert( g < nodes.size() && "Make sure g exists." );
-        assert( h < nodes.size() && "Make sure h exists." );
-        ++num_invoke_ite;
-        
+
         /* trivial cases */
         if ( fs == constant_sig(true) ){//ITE(1, g, h)=g
-            computed_table_ITE.emplace(std::make_pair(std::make_tuple(fs, gs, hs), gs) );
             return gs;
         }
         if ( fs == constant_sig(false) ){//ITE(0, g, h)=0
-            computed_table_ITE.emplace(std::make_pair(std::make_tuple(fs, gs, hs), hs) );
             return hs;
         }
         if ( gs == hs ){//ITE(f, g, g)=g
-            computed_table_ITE.emplace(std::make_pair(std::make_tuple(fs, gs, hs), gs) );
             return gs;
         }
         
@@ -633,7 +614,6 @@ public:
         bool fc = is_complemented(fs);
         
         assert( f < nodes.size() && "Make sure f exists." );
-        //assert( num_vars() <= 6 && "Truth_Table only supports functions of no greater than 6 variables." );
         
         if( fs == constant_sig(false) ) {
             return Truth_Table( num_vars() );//gives a TT full of 0
@@ -647,6 +627,7 @@ public:
         //if fs complemented in the first place: inverse the children TT
         signal_t const fxs = fc ? toggle_complemented(nodes[f].Ts) : nodes[f].Ts;
         signal_t const fnxs = fc ? toggle_complemented(nodes[f].Es) : nodes[f].Es;
+        //selection of the variables
         Truth_Table const tt_x = create_tt_nth_var( num_vars(), x );
         Truth_Table const tt_nx = create_tt_nth_var( num_vars(), x, false );
         return ( tt_x & get_tt( fxs ) ) | ( tt_nx & get_tt( fnxs ) );
@@ -731,7 +712,7 @@ private:
         * Each map maps from a pair of node indices (T, E) to a node index, if it exists.
         * See the implementation of `unique` for example usage. */
 
-        // /* Computed tables for each operation type. */
+        /* Computed tables for each operation type. */
         std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_AND;
         std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_OR;
         std::unordered_map<std::tuple<signal_t, signal_t>, signal_t> computed_table_XOR;
