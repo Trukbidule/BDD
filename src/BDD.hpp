@@ -252,20 +252,14 @@ public:
 
     //remove the "in use" mark of a signal and its children
     void deref(signal_t fs){
-        _deref_rec(fs);
-    }
-    
-    //used to explore and derefence reccursively the nodes
-    signal_t _deref_rec(signal_t fs){
         if( get_index(fs) != constant_ind() ){//if not the final node
             //decrease its ref_count if not already zero
             if(ref_count.at(get_index(fs)) > 0)
                 ref_count.at(get_index(fs))--;
             //do the same to its children
-            _deref_rec(get_node(fs).Ts);
-            _deref_rec(get_node(fs).Es);
+            deref(get_node(fs).Ts);
+            deref(get_node(fs).Es);
         }
-        return fs;
     }
 
     /**********************************************************/
